@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
-use anchor_spl::{associated_token::AssociatedToken, token::TransferChecked, token_interface::{self, Mint, TokenAccount, TokenInterface}};
+use anchor_spl::{associated_token::AssociatedToken, token_interface::{self, Mint, TokenAccount, TokenInterface, TransferChecked}};
 
-use crate::{DefiBank, User};
+use crate::state::*;
 
 #[derive(Accounts)]
 pub struct Deposit<'info>{
@@ -15,20 +15,21 @@ pub struct Deposit<'info>{
     seeds= [mint.key().as_ref()],
     bump)]  
     pub defibank: Account<'info, DefiBank> ,
-    // now you have deposited the token into the bank you also need the token account 
+    // now you have deposited the token into the bank you also need the token account of the bank
     #[account(
     mut,
     seeds= [b"treasury", mint.key().as_ref()],
     bump)] 
     pub bank_token_account: InterfaceAccount<'info, TokenAccount>,
-    #[account(    //state of the user account
+    //state of the user account 
+    #[account(            
         mut, 
         seeds = [signer.key().as_ref()],
         bump,
     )]  
     pub user_acc:  Account<'info, User> ,
-
-    #[account(                             //ensures that the user has the token
+    //ensures that the user has the token
+    #[account(                             
         mut, 
         associated_token::mint = mint,        //token address where token are presemt to put it the bank 
         associated_token::authority = signer,
@@ -59,5 +60,43 @@ pub fn process_deposit(ctx: Context<Deposit>, amount: u64) -> Result<()> {
     let decimals = ctx.accounts.mint.decimals;
 
     token_interface::transfer_checked(cpi_ctx, amount, decimals)?;
+
+    // Update the state of both the user and bank account
+    let bank = &mut ctx.accounts.defibank;
+
+    // Use checked operations for underflow and overflow
+    if bank.total_deposits == 0 {
+        bank.total_deposits = amount;
+        bank.total_deposit_shares = amount;
+    }
+
+    // Calculate the deposit ratio
+    let deposit_ratio = amount.checked_div(bank.total_deposit_shares).unwrap();
+
+    // Calculate the user's shares
+    let users_shares = bank.total_deposit_shares.checked_mul(deposit_ratio).unwrap_or(0); // Provide a fallback value
+
+    let user = &mut ctx.accounts.user_acc;
+
+    //  If you only need the public key → Use ctx.accounts.mint.key().
+    // If you need full account info (like ownership, lamports, etc.) → Use ctx.accounts.mint.to_account_info().key().
+    match ctx.accounts.mint.to_account_info().key() {
+        key if key == user.usdc_address => {
+            user.deposited_usdc += amount;
+            user.deposited_usdc_shares += users_shares; 
+        },
+        _ => {
+            user.deposited_sol += amount;
+            user.deposited_sol_shares += users_shares; 
+        }
+    }
+
+    bank.total_deposits += amount;
+    bank.total_deposit_shares += users_shares; // Now users_shares is a u64, not an Option<u64>
+
+    // Update the last updated timestamp
+    user.last_updated = Clock::get()?.unix_timestamp;
+
     Ok(())
+
 }

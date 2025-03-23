@@ -22,4 +22,9 @@ pub mod lendingapp {
     pub fn inituser(ctx: Context<InitUser> ,usdc_address:Pubkey) -> Result<()> {
         process_user(ctx, usdc_address)
     } 
+
+    pub fn deposit(ctx: Context<Deposit>, amount: u64) -> Result<()> {
+        process_deposit(ctx, amount)
+    }
+
 }
