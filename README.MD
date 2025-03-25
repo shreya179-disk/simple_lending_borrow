@@ -34,7 +34,16 @@ Interest is compounded continuously using the formula:
        A = A₀ * eʳᵗ 
 
 
+
+
+Liquidation is usually handled by liquidators, who are incentivized to repay a portion of the borrower's debt in exchange for discounted 
+collateral.
+When a liquidator repays a portion of the borrower's debt, they receive an equivalent amount of collateral + a liquidation bonus.
+The liquidation bonus varies by asset (e.g., 5% for stablecoins, 10% for volatile assets).
+
+
 THINGS TO IMPROVE IN THE CODE :
 this lending pool only handles sol and usdc, make it handle more tokens
 here we have a fixed interest rate , make it dynamic 
 multiple tokens as collateral 
+For repaying havent considered the interest rate should make changes

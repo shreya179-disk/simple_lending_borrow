@@ -1,5 +1,5 @@
 use std::f32::consts::E;
-use crate::error::ErrorCode;
+use crate::{calculate_accrued_interest, error::ErrorCode};
 use anchor_lang::prelude::*;
 use anchor_spl::{associated_token::AssociatedToken, token_interface::{self, Mint, TokenAccount, TokenInterface, TransferChecked}};
 use pyth_solana_receiver_sdk::price_update::{get_feed_id_from_hex, PriceUpdateV2};
@@ -61,11 +61,11 @@ pub fn process_borrow(ctx: Context<Borrow>, amount: u64) -> Result<()> {
     let total_collateral: u64;
 
     match ctx.accounts.mint.to_account_info().key() {
-        key if key == user.usdc_address => {
+        key if key == user.usdc_address => { //if the user is borrowing usdc, we need to calculate the collateral 
             let sol_feed_id = get_feed_id_from_hex(FEED_ID_SOL_USD)?; 
             let sol_price = price_update.get_price_no_older_than(&Clock::get()?, MAXIMUM_AGE, &sol_feed_id)?;
             let accrued_interest = calculate_accrued_interest(user.deposited_sol, bank.interest_rate, user.last_updated)?;
-            total_collateral = sol_price.price as u64 * (user.deposited_sol + accrued_interest);
+            total_collateral = sol_price.price as u64 * (user.deposited_sol + accrued_interest); //
         },
         _ => {
             let usdc_feed_id = get_feed_id_from_hex(FEED_ID_USDC_USD)?;
@@ -110,9 +110,6 @@ pub fn process_borrow(ctx: Context<Borrow>, amount: u64) -> Result<()> {
     let borrow_ratio = amount.checked_div(bank.total_borrowed).unwrap(); //same logic as deposit 
     let users_shares = bank.total_borrowed_shares.checked_mul(borrow_ratio).unwrap();
 
-    bank.total_borrowed += amount;
-    bank.total_borrowed_shares += users_shares; 
-
     match ctx.accounts.mint.to_account_info().key() {
         key if key == user.usdc_address => {
             user.borrowed_usdc += amount;
@@ -123,13 +120,9 @@ pub fn process_borrow(ctx: Context<Borrow>, amount: u64) -> Result<()> {
             user.deposited_sol_shares += users_shares;
         }
     }
-
+    bank.total_borrowed += amount;
+    bank.total_borrowed_shares += users_shares;
+    
+    user.last_update_borrowed = Clock::get()?.unix_timestamp;
     Ok(())
-}
-
-fn calculate_accrued_interest(deposited: u64, interest_rate: u64, last_update: i64) -> Result<u64> {
-    let current_time = Clock::get()?.unix_timestamp;
-    let time_elapsed = current_time - last_update;
-    let new_value = (deposited as f64 * E.powf(interest_rate as f32 * time_elapsed as f32) as f64) as u64;
-    Ok(new_value)
 }

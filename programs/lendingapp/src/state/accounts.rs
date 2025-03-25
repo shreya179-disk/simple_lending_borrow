@@ -15,6 +15,7 @@ pub struct User{
     pub borrowed_usdc_shares: u64,
     pub usdc_address: Pubkey,//just 2 tokens so easy to apply if statement
     pub last_updated: i64,
+    pub last_update_borrowed: i64
 }
 //each asset is gonna have its own bank 
 #[account]
