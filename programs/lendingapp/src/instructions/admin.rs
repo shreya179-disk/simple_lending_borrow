@@ -52,6 +52,7 @@ pub fn process_init_bank(context:Context<InitializeBank>, liquidation_threshold:
     bank.authority= context.accounts.signer.key();
     bank.liquidation_threshold= liquidation_threshold;
     bank.max_ltv=max_ltv;
+    bank.interest_rate = 0.05 as u64;
     Ok(())
 }
 

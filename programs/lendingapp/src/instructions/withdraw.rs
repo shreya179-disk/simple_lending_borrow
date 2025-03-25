@@ -1,8 +1,13 @@
+
+
+use std::f32::consts::E;
+
 use anchor_lang::prelude::*;
 use anchor_spl::{associated_token::AssociatedToken, token_interface::{self, Mint, TokenAccount, TokenInterface, TransferChecked}};
-
 use crate::state::*;
-// now the user wants to withdraw what are things it requires 
+use crate::error::ErrorCode;
+
+// now the user wants to withdraw  things it requires , so needs to pay apy on these funds
 //needs to verify if the user does have balance of that particular token 
 // first intialize the bank and from the token account if the bank we are tranferring to the user token account 
 //state of the bank and user account also changes 
@@ -10,6 +15,7 @@ use crate::state::*;
 
 #[derive(Accounts)]
 pub struct Withdraw<'info>{
+    #[account(mut)]
     pub signer: Signer<'info>, 
     pub mint: InterfaceAccount<'info, Mint>,
 
@@ -49,23 +55,24 @@ pub struct Withdraw<'info>{
 pub fn process_withdraw(ctx: Context<Withdraw>, amount: u64) -> Result<()> {
     let bank = &mut ctx.accounts.defibank;
     let user = &mut ctx.accounts.user_acc;
-
-    // Check if the user has sufficient funds based on the mint type
-    match ctx.accounts.mint.to_account_info().key() {
-        key if key == user.usdc_address => {
-            require!(
-                user.deposited_usdc >= amount,
-                ErrorCode::InsufficientFunds
-            );
-        }
-        _ => {
-            require!(
-                user.deposited_sol >= amount,
-                ErrorCode::InsufficientFunds
-            );
-        }
+    let deposited_value: u64;
+    if ctx.accounts.mint.to_account_info().key() == user.usdc_address {
+        deposited_value = user.deposited_usdc;
+    } else {
+        deposited_value = user.deposited_sol;
     }
 
+
+    // Check if the user has sufficient funds based on the mint typ
+    
+    let time_diff = Clock::get()?.unix_timestamp - user.last_updated ;
+    let updated_deposits = (bank.total_deposits as f64) * (E as f64).powf(bank.interest_rate as f64 * time_diff as f64);
+    bank.total_deposits = updated_deposits as u64;
+    let value_per_share = bank.total_deposits as f64 /bank.total_deposit_shares as f64;
+    let user_value = deposited_value as f64/value_per_share;
+    if user_value < amount as f64 {
+        return Err(ErrorCode::InsufficientFunds.into());
+    }
     // Calculate the shares to remove based on the withdrawal amount
     let shares_to_remove = (amount as f64 / bank.total_deposits as f64) * bank.total_deposit_shares as f64;
     let shares_to_remove = shares_to_remove as u64; // Convert to u64 for further calculations
@@ -99,14 +106,6 @@ pub fn process_withdraw(ctx: Context<Withdraw>, amount: u64) -> Result<()> {
 
     // Prepare the signer seeds for the CPI context
     // But when a user withdraws funds, the PDA must authorize the transfer out (like opening the mailbox to take letters out). Since PDAs don’t have private keys, they use signer seeds to prove ownership
-    let signer_seeds: &[&[&[u8]]] = &[
-        &[
-            b"treasury",
-            ctx.accounts.mint.to_account_info().key.as_ref(),
-            &[ctx.bumps.bank_token_account],
-        ],
-    ];
-
     let signer_seeds: &[&[&[u8]]] = &[
         &[
             b"treasury",

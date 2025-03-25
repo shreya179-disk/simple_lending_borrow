@@ -13,6 +13,7 @@ declare_id!("CF6a2Y8jpYC8Jc2a6bXTro4dQ462N6HJ7hQxGsaLr7Pa");
 
 #[program]
 pub mod lendingapp {
+
     use super::*;
 
     pub fn initbank(ctx: Context<InitializeBank>, liquidation_threshold:u64, max_ltv:u64) -> Result<()> {
@@ -25,6 +26,14 @@ pub mod lendingapp {
 
     pub fn deposit(ctx: Context<Deposit>, amount: u64) -> Result<()> {
         process_deposit(ctx, amount)
+    }
+
+    pub fn withdraw(ctx: Context<Withdraw>, amount: u64) -> Result<()> {
+        process_withdraw(ctx, amount)
+    }
+
+    pub fn borrow(ctx: Context<Borrow>, amount: u64) -> Result<()> {
+        process_borrow(ctx, amount)
     }
 
 }

@@ -2,7 +2,7 @@ use anchor_lang::prelude::*;
 use anchor_spl::{associated_token::AssociatedToken, token_interface::{self, Mint, TokenAccount, TokenInterface, TransferChecked}};
 
 use crate::state::*;
-
+// user earns interest by depositing the funds
 #[derive(Accounts)]
 pub struct Deposit<'info>{
     #[account(mut)]
