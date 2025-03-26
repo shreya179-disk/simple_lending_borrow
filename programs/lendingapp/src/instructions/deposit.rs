@@ -82,7 +82,7 @@ pub fn process_deposit(ctx: Context<Deposit>, amount: u64) -> Result<()> {
     // If you need full account info (like ownership, lamports, etc.) → Use ctx.accounts.mint.to_account_info().key().
     match ctx.accounts.mint.to_account_info().key() {
         key if key == user.usdc_address => {
-            user.deposited_usdc += amount;
+            user.deposited_usdc += amount;             // the user has deposited usdc
             user.deposited_usdc_shares += users_shares; 
         },
         _ => {

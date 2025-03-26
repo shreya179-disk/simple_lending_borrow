@@ -69,8 +69,7 @@ pub struct Liquidate<'info>{
 pub fn process_liquidation(ctx: Context<Liquidate>) -> Result<()> {
     let collateral_bank = &ctx.accounts.collateral_bank;
     let borrowed_bank = &ctx.accounts.borrowed_bank;
-    let liquidator = &ctx.accounts.liquidator;
-    let user_account = &ctx.accounts.user_account;
+    let user_account = &ctx.accounts.user_account; //the liquidator account intialized
     let price_update = &mut ctx.accounts.price_update;
     
     let sol_feed_id = get_feed_id_from_hex(FEED_ID_SOL_USD)?;
@@ -81,15 +80,15 @@ pub fn process_liquidation(ctx: Context<Liquidate>) -> Result<()> {
     let total_collateral: u64;
     let total_borrowed: u64;
 
-    match ctx.accounts.borrowed_mint.to_account_info().key() {
-        key if key == user_account.usdc_address => {
+    match ctx.accounts.collateral_mint.to_account_info().key() {  
+        key if key == user_account.usdc_address => {  // now the user  has deposited usdc as collateral 
            let new_usdc  = calculate_accrued_interest(user_account.deposited_usdc, collateral_bank.interest_rate, user_account.last_updated)?;
            total_collateral = usdc_price.price as u64 * new_usdc;
            let new_sol = calculate_accrued_interest(user_account.borrowed_sol, borrowed_bank.interest_rate, user_account.last_update_borrowed)?;
            total_borrowed = sol_price.price as u64 * new_sol;
     
         }
-        _ => {
+        _ => {  //if the  user has deposited sol as collateral
             let new_sol = calculate_accrued_interest(user_account.deposited_sol, collateral_bank.interest_rate, user_account.last_updated)?;
             total_collateral = sol_price.price as u64 * new_sol;
             let new_usdc = calculate_accrued_interest(user_account.borrowed_usdc, borrowed_bank.interest_rate, user_account.last_update_borrowed)?;
@@ -100,20 +99,22 @@ pub fn process_liquidation(ctx: Context<Liquidate>) -> Result<()> {
      if health_factor >= 1 {
        return Err(ErrorCode::NotUnderCollateralized.into());
      }
+     //Transfer #1: The Liquidator Repays a Portion of the Borrower's Debt
+
      let transfer_to_bank = TransferChecked{
         from: ctx.accounts.liquidator_borrowed_token_account.to_account_info(),
         to: ctx.accounts.borrowed_bank_token_account.to_account_info(),
         mint: ctx.accounts.borrowed_mint.to_account_info(),
         authority: ctx.accounts.liquidator.to_account_info(),
     };
-
+    //The liquidator repays a portion of the borrower’s debt.The amount repaid is determined by the liquidation close factor 
     let liquidation_amount = total_borrowed.checked_mul(borrowed_bank.liquidation_close_factor).unwrap();
 
     let cpi_program = ctx.accounts.token_program.to_account_info();
     let cpi_ctx = CpiContext::new(cpi_program, transfer_to_bank);
     token_interface::transfer_checked(cpi_ctx, liquidation_amount, ctx.accounts.borrowed_mint.decimals)?;
 
-
+    //Transfer #2: The Liquidator Receives Collateral in Return
     let liquidator_amount  =(liquidation_amount* collateral_bank.liquidation_bonus) + liquidation_amount;
     let transfer_to_liquidator = TransferChecked{
         from: ctx.accounts.collateral_bank_token_account.to_account_info(),
